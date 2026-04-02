@@ -7,12 +7,13 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { api } from '../api/client';
 import { formatTime, getChatTitle, getInitials, getLastMessage } from '../utils/chat';
 import { useAuth } from '../contexts/AuthContext';
-import type { Chat, RootStackParamList } from '../types';
+import type { Chat, RootStackParamList, SessionUser } from '../types';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Chats'>;
@@ -24,7 +25,7 @@ export default function ChatsScreen({ navigation }: Props) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searchResults, setSearchResults] = useState<SessionUser[]>([]);
   const [searching, setSearching] = useState(false);
   
   const loadChats = useCallback(async () => {
@@ -58,7 +59,7 @@ const searchUsers = async () => {
     setSearching(true);
 
     const res = await api.get('/users', {
-      headers: authHeaders,
+      headers: { Authorization: `Bearer ${token}` },
       params: { query: value },
     });
 
@@ -81,7 +82,7 @@ const startDirectChat = async (otherUserId: string) => {
     const res = await api.post(
       '/chats/direct',
       { otherUserId },
-      { headers: authHeaders },
+      { headers: { Authorization: `Bearer ${token}` } },
     );
 
     const chat = res.data;
@@ -92,8 +93,7 @@ const startDirectChat = async (otherUserId: string) => {
     await loadChats();
 
     if (chat?.id) {
-      setSelectedChatId(chat.id);
-      await loadMessages(chat.id);
+      navigation.navigate('Chat', { chatId: chat.id, title: getChatTitle(chat, userId) });
     }
   } catch (err: any) {
     console.log('startDirectChat error', err?.response?.data || err?.message || err);

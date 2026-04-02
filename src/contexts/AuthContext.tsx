@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../api/client';
+import { getPushToken, savePushToken, setupNotificationListeners } from '../services/pushNotifications';
 import type { SessionUser } from '../types';
 
 interface AuthContextType {
@@ -50,6 +51,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     };
     loadAuth();
+
+    // Настроить listeners для входящих уведомлений
+    const unsubscribe = setupNotificationListeners();
+    return unsubscribe;
   }, []);
 
   const login = async (newToken: string, newUser: SessionUser) => {
@@ -59,6 +64,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     await AsyncStorage.setItem('pm_token', newToken);
     await AsyncStorage.setItem('pm_user_id', newUser.id);
     await AsyncStorage.setItem('pm_email', newUser.email);
+
+    // Получить и отправить push-токен (с логированием)
+    try {
+      console.log('=== Starting push token setup ===');
+      const pushToken = await getPushToken(newToken);
+      if (pushToken) {
+        console.log('→ Push token received, saving to server...');
+        const saved = await savePushToken(newToken, pushToken);
+        if (saved) {
+          console.log('✅ Push token successfully saved!');
+        } else {
+          console.log('⚠️ Failed to save push token to server');
+        }
+      } else {
+        console.log('⚠️ No push token obtained');
+      }
+    } catch (err) {
+      console.error('Error during push token setup:', err);
+    }
   };
 
   const logout = async () => {
