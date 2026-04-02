@@ -1,0 +1,199 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { api } from '../api/client';
+import { formatTime, getChatTitle, getInitials, getLastMessage } from '../utils/chat';
+import type { Chat, RootStackParamList } from '../types';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Chats'> & {
+  token: string;
+  currentUserId: string;
+  onLogout: () => void;
+};
+
+export default function ChatsScreen({ token, currentUserId, navigation, onLogout }: Props) {
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadChats = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      const res = await api.get('/chats', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setChats(Array.isArray(res.data) ? res.data : []);
+    } catch (err: any) {
+      Alert.alert(
+        'Could not load chats',
+        err?.response?.data?.message || err?.message || 'Please try again.',
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadChats();
+  }, [loadChats]);
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.title}>Chats</Text>
+            <Text style={styles.subtitle}>Your private conversations</Text>
+          </View>
+          <Pressable onPress={onLogout}>
+            <Text style={styles.logout}>Sign out</Text>
+          </Pressable>
+        </View>
+
+        <FlatList
+          data={chats}
+          keyExtractor={(item) => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadChats} tintColor="#fff" />}
+          renderItem={({ item }) => {
+            const title = getChatTitle(item, currentUserId);
+            const lastMessage = getLastMessage(item);
+            const lastTime = formatTime(item.messages?.[item.messages.length - 1]?.createdAt || item.createdAt);
+
+            return (
+              <Pressable
+                style={styles.chatCard}
+                onPress={() => navigation.navigate('Chat', { chatId: item.id, title })}
+              >
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{getInitials(title)}</Text>
+                </View>
+
+                <View style={styles.chatBody}>
+                  <View style={styles.topRow}>
+                    <Text style={styles.chatName} numberOfLines={1}>{title}</Text>
+                    <Text style={styles.time}>{lastTime}</Text>
+                  </View>
+                  <Text style={styles.preview} numberOfLines={1}>{lastMessage}</Text>
+                </View>
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyTitle}>No chats yet</Text>
+              <Text style={styles.emptySubtitle}>Create a direct chat from the backend first, then pull to refresh here.</Text>
+            </View>
+          }
+          contentContainerStyle={chats.length === 0 ? styles.emptyContainer : { paddingBottom: 20 }}
+        />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#07152b',
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  header: {
+    paddingTop: 8,
+    paddingBottom: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  title: {
+    color: '#fff',
+    fontSize: 34,
+    fontWeight: '800',
+  },
+  subtitle: {
+    color: '#8ea4c7',
+    marginTop: 4,
+  },
+  logout: {
+    color: '#9ec2ff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  chatCard: {
+    backgroundColor: '#0f213f',
+    borderWidth: 1,
+    borderColor: '#1e335d',
+    borderRadius: 22,
+    padding: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#2d6cdf',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  avatarText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 20,
+  },
+  chatBody: {
+    flex: 1,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  chatName: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 12,
+  },
+  time: {
+    color: '#7f95bc',
+    fontSize: 12,
+  },
+  preview: {
+    color: '#9eb0d1',
+    fontSize: 14,
+  },
+  emptyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  emptyWrap: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    color: '#8ea4c7',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+});
