@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -13,19 +13,22 @@ import {
 } from 'react-native';
 import { api } from '../api/client';
 import { formatTime } from '../utils/chat';
+import { useAuth } from '../contexts/AuthContext';
 import type { ChatMessage, RootStackParamList } from '../types';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Chat'> & {
-  token: string;
-  currentUserId: string;
-};
+type Props = NativeStackScreenProps<RootStackParamList, 'Chat'>;
 
-export default function ChatScreen({ route, token, currentUserId }: Props) {
+export default function ChatScreen({ route, navigation }: Props) {
+  const { token, userId } = useAuth();
   const { chatId } = route.params;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  const shouldStickToBottomRef = useRef(true);
 
   const loadMessages = useCallback(async () => {
     try {
@@ -46,6 +49,27 @@ export default function ChatScreen({ route, token, currentUserId }: Props) {
     const interval = setInterval(loadMessages, 4000);
     return () => clearInterval(interval);
   }, [loadMessages]);
+
+  useEffect(() => {
+    shouldStickToBottomRef.current = true;
+  }, []);
+
+  const scrollToBottom = (animated = false) => {
+    if (messages.length > 0) {
+      flatListRef.current?.scrollToEnd({ animated });
+    }
+  };
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = Math.max(
+      0,
+      contentSize.height - (contentOffset.y + layoutMeasurement.height),
+    );
+    const isNearBottom = distanceFromBottom <= 120;
+    shouldStickToBottomRef.current = isNearBottom;
+    setShowScrollToBottom(!isNearBottom);
+  };
 
   const sendMessage = async () => {
     const payload = text.trim();
@@ -75,14 +99,34 @@ export default function ChatScreen({ route, token, currentUserId }: Props) {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={7}
       >
+        <View style={styles.header}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Text style={styles.backText}>‹</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>{route.params.title || 'Chat'}</Text>
+        </View>
         <FlatList
+          ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          keyboardDismissMode="interactive"
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onLayout={() => {
+            if (shouldStickToBottomRef.current) {
+              scrollToBottom(false);
+            }
+          }}
+          onContentSizeChange={() => {
+            if (shouldStickToBottomRef.current) {
+              scrollToBottom(false);
+            }
+          }}
           renderItem={({ item }) => {
-            const isMine = item.senderId === currentUserId;
+            const isMine = item.senderId === userId;
             return (
               <View style={[styles.bubbleWrap, isMine ? styles.mineWrap : styles.otherWrap]}>
                 <View style={[styles.bubble, isMine ? styles.mineBubble : styles.otherBubble]}>
@@ -97,6 +141,18 @@ export default function ChatScreen({ route, token, currentUserId }: Props) {
           }}
           ListEmptyComponent={<Text style={styles.emptyText}>No messages yet</Text>}
         />
+
+        {showScrollToBottom && (
+          <Pressable
+            style={styles.scrollToBottomButton}
+            onPress={() => {
+              setShowScrollToBottom(false);
+              scrollToBottom(true);
+            }}
+          >
+            <Text style={styles.scrollToBottomText}>↓</Text>
+          </Pressable>
+        )}
 
         <View style={styles.composer}>
           <TextInput
@@ -124,6 +180,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#07152b',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#0f172a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+  },
+  backButton: {
+    marginRight: 12,
+  },
+  backText: {
+    color: '#60a5fa',
+    fontSize: 34,
+    lineHeight: 34,
+    fontWeight: '400',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
   },
   list: {
     paddingHorizontal: 12,
@@ -210,5 +289,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     marginLeft: 2,
+  },
+  scrollToBottomButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 80,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2d6cdf',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  scrollToBottomText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
   },
 });

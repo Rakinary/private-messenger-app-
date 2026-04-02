@@ -11,16 +11,16 @@ import {
 } from 'react-native';
 import { api } from '../api/client';
 import { formatTime, getChatTitle, getInitials, getLastMessage } from '../utils/chat';
+import { useAuth } from '../contexts/AuthContext';
 import type { Chat, RootStackParamList } from '../types';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Chats'> & {
-  token: string;
-  currentUserId: string;
-  onLogout: () => void;
-};
+type Props = NativeStackScreenProps<RootStackParamList, 'Chats'>;
 
-export default function ChatsScreen({ token, currentUserId, navigation, onLogout }: Props) {
+export default function ChatsScreen({ navigation }: Props) {
+  const { token, userId, logout } = useAuth();
+
+  if (!userId) return null;
   const [chats, setChats] = useState<Chat[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -53,7 +53,7 @@ export default function ChatsScreen({ token, currentUserId, navigation, onLogout
             <Text style={styles.title}>Chats</Text>
             <Text style={styles.subtitle}>Your private conversations</Text>
           </View>
-          <Pressable onPress={onLogout}>
+          <Pressable onPress={logout}>
             <Text style={styles.logout}>Sign out</Text>
           </Pressable>
         </View>
@@ -63,9 +63,12 @@ export default function ChatsScreen({ token, currentUserId, navigation, onLogout
           keyExtractor={(item) => item.id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadChats} tintColor="#fff" />}
           renderItem={({ item }) => {
-            const title = getChatTitle(item, currentUserId);
+            const title = getChatTitle(item, userId);
             const lastMessage = getLastMessage(item);
             const lastTime = formatTime(item.messages?.[item.messages.length - 1]?.createdAt || item.createdAt);
+            const lastMsgSender = item.messages?.[item.messages.length - 1]?.senderId;
+            const isLastMine = lastMsgSender === userId;
+            const previewText = lastMessage ? (isLastMine ? `You: ${lastMessage}` : lastMessage) : 'No messages yet';
 
             return (
               <Pressable
@@ -81,7 +84,7 @@ export default function ChatsScreen({ token, currentUserId, navigation, onLogout
                     <Text style={styles.chatName} numberOfLines={1}>{title}</Text>
                     <Text style={styles.time}>{lastTime}</Text>
                   </View>
-                  <Text style={styles.preview} numberOfLines={1}>{lastMessage}</Text>
+                  <Text style={styles.preview} numberOfLines={1}>{previewText}</Text>
                 </View>
               </Pressable>
             );

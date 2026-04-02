@@ -38,6 +38,7 @@ export type Chat = {
 };
 
 export type RootStackParamList = {
+  Login: undefined;
   Chats: undefined;
   Chat: {
     chatId: string;
