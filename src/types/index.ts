@@ -38,10 +38,16 @@ export type Chat = {
 };
 
 export type RootStackParamList = {
-  Login: undefined;
   Chats: undefined;
   Chat: {
     chatId: string;
     title?: string;
   };
+};
+
+export type SearchUser = {
+  id: string;
+  username: string;
+  email?: string;
+  createdAt?: string;
 };

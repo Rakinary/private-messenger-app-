@@ -23,7 +23,10 @@ export default function ChatsScreen({ navigation }: Props) {
   if (!userId) return null;
   const [chats, setChats] = useState<Chat[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searching, setSearching] = useState(false);
+  
   const loadChats = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -41,6 +44,66 @@ export default function ChatsScreen({ navigation }: Props) {
     }
   }, [token]);
 
+const searchUsers = async () => {
+  if (!token) return;
+
+  const value = search.trim();
+
+  if (!value) {
+    setSearchResults([]);
+    return;
+  }
+
+  try {
+    setSearching(true);
+
+    const res = await api.get('/users', {
+      headers: authHeaders,
+      params: { query: value },
+    });
+
+    setSearchResults(Array.isArray(res.data) ? res.data : []);
+  } catch (err: any) {
+    console.log('searchUsers error', err?.response?.data || err?.message || err);
+    Alert.alert(
+      'Ошибка поиска',
+      err?.response?.data?.message || err?.message || 'Не удалось найти пользователей',
+    );
+  } finally {
+    setSearching(false);
+  }
+};
+
+const startDirectChat = async (otherUserId: string) => {
+  if (!token) return;
+
+  try {
+    const res = await api.post(
+      '/chats/direct',
+      { otherUserId },
+      { headers: authHeaders },
+    );
+
+    const chat = res.data;
+
+    setSearch('');
+    setSearchResults([]);
+
+    await loadChats();
+
+    if (chat?.id) {
+      setSelectedChatId(chat.id);
+      await loadMessages(chat.id);
+    }
+  } catch (err: any) {
+    console.log('startDirectChat error', err?.response?.data || err?.message || err);
+    Alert.alert(
+      'Ошибка',
+      err?.response?.data?.message || err?.message || 'Не удалось создать чат',
+    );
+  }
+};
+
   useEffect(() => {
     loadChats();
   }, [loadChats]);
@@ -57,6 +120,50 @@ export default function ChatsScreen({ navigation }: Props) {
             <Text style={styles.logout}>Sign out</Text>
           </Pressable>
         </View>
+
+<View style={styles.searchWrap}>
+  <TextInput
+    style={styles.searchInput}
+    placeholder="Поиск по username"
+    placeholderTextColor="#888"
+    autoCapitalize="none"
+    autoCorrect={false}
+    spellCheck={false}
+    value={search}
+    onChangeText={setSearch}
+    onSubmitEditing={searchUsers}
+    returnKeyType="search"
+  />
+
+  <Pressable
+    style={styles.searchButton}
+    onPress={searchUsers}
+    disabled={searching}
+  >
+    <Text style={styles.searchButtonText}>
+      {searching ? '...' : 'Search'}
+    </Text>
+  </Pressable>
+</View>
+
+{searchResults.length > 0 && (
+  <View style={styles.searchResults}>
+    {searchResults.map((user) => (
+      <Pressable
+        key={user.id}
+        style={styles.searchUserCard}
+        onPress={() => startDirectChat(user.id)}
+      >
+        <Text style={styles.searchUsername}>
+          @{user.username || user.email || 'user'}
+        </Text>
+        {!!user.email && (
+          <Text style={styles.searchEmail}>{user.email}</Text>
+        )}
+      </Pressable>
+    ))}
+  </View>
+)}
 
         <FlatList
           data={chats}
@@ -199,4 +306,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+
+  searchWrap: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: '#1e293b',
+    color: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  searchButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  searchResults: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  searchUserCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  searchUsername: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  searchEmail: {
+    color: '#94a3b8',
+    marginTop: 4,
+    fontSize: 13,
+  },  
 });
